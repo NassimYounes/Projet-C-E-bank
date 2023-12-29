@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,7 +7,9 @@ struct Compte {
     char nom[50];
     float solde;
 };
-///////////creer un nv compte en lui donnant un numéro////////////////////
+
+int numeroCompteGlobal = 0; // N de compte global
+////////////////////////////creer nv compte en lui donnant un numéro/////////////////////
 void creerCompte() {
     FILE *fichier = fopen("donnees.txt", "a");
     if (fichier == NULL) {
@@ -23,35 +24,15 @@ void creerCompte() {
 
     printf("Entrez le solde initial : ");
     scanf("%f", &nouveauCompte.solde);
-
-    FILE *nouveauFichier = fopen("newdonnees.txt", "w");
-    if (nouveauFichier == NULL) {
-        printf("Erreur lors de la création du nouveau fichier.\n");
-        fclose(fichier);
-        return;
-    }
-
-    // Lire les comptes du fichier existant et les copier dans le nouveau fichier
-    struct Compte compte;
-    while (fscanf(fichier, "%d %s %f", &compte.numero, compte.nom, &compte.solde) != EOF) {
-        fprintf(nouveauFichier, "%d %s %.2f\n", compte.numero, compte.nom, compte.solde);
-    }
-
-    // Ajouter le nouveau compte dans le fichier
-    nouveauCompte.numero = compte.numero + 1;
-    fprintf(nouveauFichier, "%d %s %.2f\n", nouveauCompte.numero, nouveauCompte.nom, nouveauCompte.solde);
-
+    numeroCompteGlobal++;
+    nouveauCompte.numero = numeroCompteGlobal;
+    fprintf(fichier, "%d %s %.2f\n", nouveauCompte.numero, nouveauCompte.nom, nouveauCompte.solde);
     fclose(fichier);
-    fclose(nouveauFichier);
-
-    // Supprimer l'ancien fichier
-    remove("donnees.txt");
-    // Renommer le nouveau fichier
-    rename("newdonnees.txt", "donnees.txt");
 
     printf("Le compte a été créé avec succès. Numéro de compte : %d\n", nouveauCompte.numero);
 }
-///////////////////////mettre à jour un compte en lui donnant le numéro d'un compte à modifier et le nouveau montant/////////////////////////////
+
+///////changer le montant d'un compte à partir de numéro////////////////////
 void mettreAJourCompte(int numeroCompte) {
     FILE *fichier = fopen("donnees.txt", "r+");
     if (fichier == NULL) {
@@ -60,6 +41,8 @@ void mettreAJourCompte(int numeroCompte) {
     }
 
     struct Compte compte;
+    int compteTrouve = 0;
+
     // Parcourir le fichier jusqu'au compte avec le numéro spécifié
     while (fscanf(fichier, "%d %s %f", &compte.numero, compte.nom, &compte.solde) != EOF) {
         if (compte.numero == numeroCompte) {
@@ -72,16 +55,20 @@ void mettreAJourCompte(int numeroCompte) {
             // Remettre le curseur du fichier à la position du compte
             fseek(fichier, -((long int)sizeof(struct Compte)), SEEK_CUR);
 
-
             // Écrire les nouvelles informations du compte
-            fprintf(fichier, "%d %s %.2f", compte.numero, compte.nom, compte.solde);
+            fprintf(fichier, "%d %s %.2f\n", compte.numero, compte.nom, compte.solde);
+            compteTrouve = 1;
             break;
         }
     }
 
     fclose(fichier);
+
+    if (!compteTrouve) {
+        printf("Le compte %d n'a pas été trouvé.\n", numeroCompte);
+    }
 }
-///////////////////////changer les param de compte : un retrait ou un ajout d,argent//////////////////////////////////////////
+
 void gererTransactions(int numeroCompte) {
     FILE *fichier = fopen("donnees.txt", "r+");
     if (fichier == NULL) {
@@ -91,6 +78,14 @@ void gererTransactions(int numeroCompte) {
 
     struct Compte compte;
     int compteTrouve = 0;
+
+    // Créer un fichier temporaire pour stocker les comptes mis à jour
+    FILE *tempFichier = fopen("tempdonnees.txt", "w");
+    if (tempFichier == NULL) {
+        perror("Erreur lors de la création du fichier temporaire");
+        fclose(fichier);
+        return;
+    }
 
     // Parcourir le fichier jusqu'au compte avec le numéro spécifié
     while (fscanf(fichier, "%d %s %f", &compte.numero, compte.nom, &compte.solde) != EOF) {
@@ -112,22 +107,22 @@ void gererTransactions(int numeroCompte) {
 
                 switch (choixTransaction) {
                     case 1:
-                        /////////////////////////le cas d'un ajout d'arg ++++++///////////////////////////////////////
+                        ///////////////////////////// Le cas d'un ajout d'argent////////////////////////////////////
                         {
                             float montantDepot;
-                            printf("Entrez le montant du dépôt : ");
+                            printf("Entrez le montant ajouté : ");
                             scanf("%f", &montantDepot);
 
                             if (montantDepot > 0) {
                                 compte.solde += montantDepot;
                                 printf("Dépôt de %.2f effectué avec succès. Nouveau solde : %.2f\n", montantDepot, compte.solde);
                             } else {
-                                printf("Montant invalide pour le dépôt.\n");
+                                printf("Montant invalide pour l'ajout.\n");
                             }
                         }
                         break;
                     case 2:
-                        ////////////////////////////le cas d'un retrait d'arg---------------//////////////////////////////////////////
+                        ///////////////////////////////////////// Le cas d'un retrait d'argent////////////////////////////////
                         {
                             float montantRetrait;
                             printf("Entrez le montant du retrait : ");
@@ -150,71 +145,28 @@ void gererTransactions(int numeroCompte) {
 
             } while (choixTransaction != 0);
 
-            // Remettre à jour le solde dans le fichier
-            fseek(fichier, -((long int)sizeof(struct Compte)), SEEK_CUR);
-
-            fprintf(fichier, "%d %s %.2f", compte.numero, compte.nom, compte.solde);
-            break;
+            // Écrire le compte mis à jour dans le fichier temporaire
+            fprintf(tempFichier, "%d %s %.2f\n", compte.numero, compte.nom, compte.solde);
+        } else {
+            // Écrire le compte dans le fichier temporaire sans le modifier
+            fprintf(tempFichier, "%d %s %.2f\n", compte.numero, compte.nom, compte.solde);
         }
     }
 
     fclose(fichier);
+    fclose(tempFichier);
 
     if (!compteTrouve) {
         printf("Le compte %d n'a pas été trouvé.\n", numeroCompte);
+        remove("tempdonnees.txt"); // Supprimer le fichier temporaire si le compte n'a pas été trouvé
+    } else {
+        // Remplacer l'ancien fichier par le fichier temporaire
+        remove("donnees.txt");
+        rename("tempdonnees.txt", "donnees.txt");
     }
 }
 
-void supprimerCompte(int numeroCompte) {
-    FILE *fichier = fopen("donnees.txt", "r+");
-    if (fichier == NULL) {
-        printf("Erreur lors de l'ouverture du fichier.\n");
-        return;
-    }
-
-    FILE *nouveauFichier = fopen("newdonnees.txt", "w");
-    if (nouveauFichier == NULL) {
-        printf("Erreur lors de la création du nouveau fichier.\n");
-        fclose(fichier);
-        return;
-    }
-
-    struct Compte compte;
-    int compteTrouve = 0;
-
-    // Lire les comptes 
-    while (fscanf(fichier, "%d %s %f", &compte.numero, compte.nom, &compte.solde) != EOF) {
-        if (compte.numero == numeroCompte) {
-            // Demander confirmation à l'utilisateur
-            char confirmation;
-            printf("Voulez-vous vraiment supprimer le compte %d (%s) ? (O/N): ", compte.numero, compte.nom);
-            scanf(" %c", &confirmation);
-            if (confirmation == 'O' || confirmation == 'o') {
-                compteTrouve = 1; 
-                continue; 
-            }
-        }
-        // Écrire le compte dans le nouveau fichier
-        fprintf(nouveauFichier, "%d %s %.2f\n", compte.numero, compte.nom, compte.solde);
-    }
-
-    fclose(fichier);
-    fclose(nouveauFichier);
-
-    if (!compteTrouve) {
-        printf("Le compte %d n'a pas été trouvé.\n", numeroCompte);
-        remove("newdonnees.txt"); // Supprimer le nouveau fichier si je nensuis pas besoin de l'utiliserrr
-        return;
-    }
-
-    // Supprimer l'ancien fichier
-    remove("donnees.txt");
-    // Renommer le nouveau fichier
-    rename("newdonnees.txt", "donnees.txt");
-
-    printf("Le compte %d a été supprimé avec succès.\n", numeroCompte);
-}
-
+///////////affichier le montant d'un compte à partir d'un num///////////////////////////////////////////
 void afficherDetailsCompte(int numeroCompte) {
     FILE *fichier = fopen("donnees.txt", "r");
     if (fichier == NULL) {
@@ -234,8 +186,6 @@ void afficherDetailsCompte(int numeroCompte) {
             printf("Détails du compte %d (%s) :\n", compte.numero, compte.nom);
             printf("Solde : %.2f\n", compte.solde);
 
-            // Vous pouvez ajouter ici d'autres informations sur le compte
-
             break;
         }
     }
@@ -246,7 +196,58 @@ void afficherDetailsCompte(int numeroCompte) {
         printf("Le compte %d n'a pas été trouvé.\n", numeroCompte);
     }
 }
-///////////////////////////////////////////////afficher tous les comptes ///////////////////////////////////
+
+void supprimerCompte(int numeroCompte) {
+    FILE *fichier = fopen("donnees.txt", "r");
+    if (fichier == NULL) {
+        printf("Erreur lors de l'ouverture du fichier.\n");
+        return;
+    }
+
+    FILE *tempFichier = fopen("tempdonnees.txt", "w");
+    if (tempFichier == NULL) {
+        printf("Erreur lors de la création du fichier temporaire.\n");
+        fclose(fichier);
+        return;
+    }
+
+    struct Compte compte;
+    int compteTrouve = 0;
+
+    // Parcourir le fichier jusqu'au compte avec le numéro 
+    while (fscanf(fichier, "%d %s %f", &compte.numero, compte.nom, &compte.solde) != EOF) {
+        if (compte.numero == numeroCompte) {
+            compteTrouve = 1; // Marquer le compte comme trouvé
+
+            // Demander confirmation à l'utilisateur
+            char confirmation;
+            printf("Voulez-vous vraiment supprimer le compte %d (%s) ? (O/N): ", compte.numero, compte.nom);
+            scanf(" %c", &confirmation);
+            if (confirmation == 'O' || confirmation == 'o') {
+                continue; // Ne pas écrire le compte dans le fichier temporaire
+            }
+        }
+
+        // Écrire le compte dans le fichier temporaire
+        fprintf(tempFichier, "%d %s %.2f\n", compte.numero, compte.nom, compte.solde);
+    }
+
+    fclose(fichier);
+    fclose(tempFichier);
+
+    if (!compteTrouve) {
+        printf("Le compte %d n'a pas été trouvé.\n", numeroCompte);
+        remove("tempdonnees.txt"); // Supprimer le fichier temporaire si le compte n'a pas été trouvé
+        return;
+    }
+
+    // Remplacer l'ancien fichier par le fichier temporaire
+    remove("donnees.txt");
+    rename("tempdonnees.txt", "donnees.txt");
+
+    printf("Le compte %d a été supprimé avec succès.\n", numeroCompte);
+}
+///////////////////////////////////////////affichier tous les comptes/////////////////////////////
 void afficherListeClients() {
     FILE *fichier = fopen("donnees.txt", "r");
     if (fichier == NULL) {
@@ -258,8 +259,7 @@ void afficherListeClients() {
 
     printf("Liste des clients :\n");
 
-    // parcourir tous les comptes du fichier 
-    while (fscanf(fichier, "%d %s %f", &compte.numero, compte.nom, &compte.solde) != EOF) {
+    while (fscanf(fichier, "%d %s %f", &compte.numero, compte.nom, &compte.solde) == 3) {
         // Afficher les détails du compte
         printf("Numéro de compte : %d\n", compte.numero);
         printf("Nom du client : %s\n", compte.nom);
